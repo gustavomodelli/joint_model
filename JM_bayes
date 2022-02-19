@@ -1,0 +1,72 @@
+library(tidyverse)
+library(JMbayes2)
+
+pbc <- JMbayes2::pbc2
+
+pbc2.id$status2 <- as.numeric(pbc2.id$status != 'alive')
+CoxFit <- coxph(Surv(years, status2) ~ sex, data = pbc2.id)
+summary(CoxFit)
+
+fm1 <- lme(log(serBilir) ~ year * sex, data = pbc2, random = ~ year | id)
+
+jointFit1 <- jm(CoxFit, fm1, time_var = "year")
+summary(jointFit1)
+
+predict(jointFit1, pbc[1:5, ])
+
+## example Tx
+set.seed(123)
+data <- data.frame(
+  id = 1:500,
+  age = rnorm(500, 50, 5),
+  rejection = c(rbinom(250, 1, 0.25), rbinom(250, 1, 0.5) ),
+  time = c(rpois(250, 3), rpois(250, 2)),
+  lost_kidney = c(rbinom(250, 1, 0.1), rbinom(250, 1, 0.2)),
+  creat_0 = c(rnorm(250, 1, 0.1), rnorm(250, 1.5, 0.1)),
+  creat_1 = c(rnorm(250, 1.1, 0.1), rnorm(250, 1.6, 0.1)),
+  creat_2 = c(rnorm(250, 1.3, 0.1), rnorm(250, 1.8, 0.1))
+)
+
+
+data_long <- data %>% 
+  pivot_longer(
+    cols = c(contains('creat_')),
+    values_to = 'creatinine',
+    names_to = 'time_creat'
+  ) %>% 
+  mutate(time_creat = parse_number(time_creat))
+
+## trajectories of creatinine over time
+data_long %>% 
+  mutate(time_creat = factor(time_creat)) %>% 
+  ggplot(aes(time_creat, creatinine, fill = time_creat))+
+  geom_boxplot()+
+  facet_wrap(~ lost_kidney)
+
+## trajectories of creatinine over time
+data_long %>% 
+  mutate(time_creat = factor(time_creat)) %>% 
+  ggplot(aes(time_creat, creatinine, group = id))+
+  geom_line()+
+  geom_smooth()+
+  facet_wrap(~ lost_kidney)
+
+
+model1 <- coxph(Surv(time, lost_kidney) ~ rejection, data = data)
+summary(model1)
+
+model2 <-  coxph(Surv(time, lost_kidney) ~ rejection + creat_0, data = data)
+summary(model2)
+
+## model creatinina
+model3 <- lme(creatinine ~ rejection*time_creat, random = ~ time_creat | id, data = data_long)
+summary(model3)
+
+
+# joint model
+joint1 <- jm(model1, model3, time_var = 'time_creat')
+summary(joint1)
+
+predict(joint1, data_long[1:5, ], process = 'event')
+
+tvROC(joint1, data_long, Tstart = t0, Dt = 3)
