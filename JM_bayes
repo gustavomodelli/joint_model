@@ -52,6 +52,7 @@ data_long %>%
   facet_wrap(~ lost_kidney)
 
 
+
 model1 <- coxph(Surv(time, lost_kidney) ~ rejection, data = data)
 summary(model1)
 
@@ -69,4 +70,27 @@ summary(joint1)
 
 predict(joint1, data_long[1:5, ], process = 'event')
 
-tvROC(joint1, data_long, Tstart = t0, Dt = 3)
+
+roc <- tvROC(joint1, data_long, Tstart = 0, Dt = 5)
+plot(roc)
+tvAUC(roc)
+
+calibration_plot(joint1, data_long, Tstart = 0, Dt = 5)
+calibration_metrics(joint1, data_long, Tstart = 0, Dt = 5)
+
+## sim data
+sim.data <- data.frame(
+  id = 1000,
+  age = 48,
+  rejection = 0,
+  time_creat = c(3, 6),
+  creatinine = c(3,3.5)
+)
+
+pre1 <- predict(joint1, sim.data, process = 'event', return_newdata = TRUE,
+                times = seq(1, 10, by = 1))
+pre2 <- predict(joint1, sim.data, return_newdata = TRUE, times = seq(1, 10, by = 1))
+plot(pre1)
+plot(pre2)
+
+plot(pre2, pre1)
